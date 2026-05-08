@@ -62,8 +62,10 @@ module ActsAsFifoLifo
          batch_number = rec.send(@fifo_batch_field)
          batch_qty = rec.total_qty.to_i
          batch_cost = rec.total_cost.to_f
+         batch_time = rec.first_time
+
          take = [ batch_qty, remaining ].min
-         result << { batch_number: batch_number, qty: take, cost: batch_cost }
+         result << { batch_number: batch_number, qty: take, cost: batch_cost, batch_time: batch_time }
          remaining -= take
          break if remaining <= 0
        end
