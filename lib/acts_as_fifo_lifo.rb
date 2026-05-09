@@ -70,7 +70,49 @@ module ActsAsFifoLifo
          break if remaining <= 0
        end
 
-       result
+      result
+    end
+
+    # Calculates stock balance grouped by storage, item and batch.
+    # Returns an array of hashes where each element represents a storage location
+    # and contains two keys:
+    #   * :groups  – summary per item (total qty and cost for the storage)
+    #   * :details – list of batches for that storage with their qty and cost
+    # The calculation uses the field names configured via `acts_as_fifo`.
+    def stock_balance_by_batches_calculation
+      base_scope = where.not(@fifo_qty_field => nil)
+
+      records = base_scope
+        .group(@fifo_storage_field, @fifo_item_field, @fifo_batch_field)
+        .select(
+          @fifo_storage_field,
+          @fifo_item_field,
+          @fifo_batch_field,
+          "SUM(#{@fifo_qty_field}) AS total_qty",
+          "MIN(#{@fifo_cost_field}) AS batch_cost"
+        )
+
+      storage_hash = {}
+      records.each do |rec|
+        storage = rec.send(@fifo_storage_field)
+        item    = rec.send(@fifo_item_field)
+        batch   = rec.send(@fifo_batch_field)
+        qty     = rec.total_qty.to_i
+        cost    = rec.batch_cost.to_f
+
+        storage_hash[storage] ||= { groups: {}, details: [] }
+        storage_hash[storage][:groups][item] ||= { item: item, qty: 0, cost: 0.0 }
+        storage_hash[storage][:groups][item][:qty] += qty
+        # keep minimum cost per item across batches
+        cur = storage_hash[storage][:groups][item][:cost]
+        storage_hash[storage][:groups][item][:cost] = cost if cur.zero? || cost < cur
+
+        storage_hash[storage][:details] << { item: batch, qty: qty, cost: cost }
+      end
+
+      storage_hash.map do |_storage, data|
+        { groups: data[:groups].values, details: data[:details] }
+      end
     end
   end
 end
