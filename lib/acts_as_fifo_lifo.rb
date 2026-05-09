@@ -49,7 +49,7 @@ module ActsAsFifoLifo
          .select(
            @fifo_batch_field,
            "SUM(#{@fifo_qty_field}) AS total_qty",
-           "SUM(#{@fifo_cost_field}) AS total_cost",
+           "MIN(#{@fifo_cost_field}) AS total_cost",
            "MIN(#{@fifo_time_field}) AS first_time"
          )
          .having("SUM(#{@fifo_qty_field}) > 0")
