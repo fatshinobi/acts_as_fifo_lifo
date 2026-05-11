@@ -70,7 +70,55 @@ module ActsAsFifoLifo
          break if remaining <= 0
        end
 
-       result
+      result
+    end
+
+    # Calculates stock balance grouped by storage, item and batch.
+    # Returns an array of hashes where each element represents a storage location
+    # and contains two keys:
+    #   * :groups  – summary per item (total qty and cost for the storage)
+    #   * :details – list of batches for that storage with their qty and cost
+    # The calculation uses the field names configured via `acts_as_fifo`.
+    def stock_balance_by_batches_calculation
+      # base_scope = where.not(@fifo_qty_field => nil)
+      records = group(@fifo_storage_field, @fifo_item_field, @fifo_batch_field)
+        .select(
+          @fifo_storage_field,
+          @fifo_item_field,
+          @fifo_batch_field,
+          "SUM(#{@fifo_qty_field}) AS total_qty",
+          "MIN(#{@fifo_cost_field}) AS batch_cost"
+        )
+
+      nested_records = records.group_by(&:storage_id).transform_values do |storage_group|
+        storage_group.group_by(&:item_id)
+      end
+
+      results = []
+      nested_records.each do |storage_id, items_hash|
+        # Level 1: Storage level
+        puts "Storage ID: #{storage_id}"
+        storage_hash = { details: { item: "Storage #{storage_id}", qty: 0, batch_cost: "", cost: 0 }, children: [] }
+
+        items_hash.each do |item_id, records|
+          # Level 2: Item level
+          puts "  Item ID: #{item_id}"
+          item_hash = { details: { item: "Item #{item_id}", qty: 0, batch_cost: "", cost: 0 }, children: [] }
+          storage_hash[:children] << item_hash
+
+          # Level 3: Batch records level (each record contains your select aliases)
+          records.each do |record|
+            puts "    Batch ID: #{record.batch_number} | Total Qty: #{record.total_qty} | Cost: #{record.batch_cost}"
+            item_hash[:children] << { details: { item: record.batch_number, qty: record.total_qty.to_i, batch_cost: record.batch_cost.to_f, cost: record.batch_cost.to_f * record.total_qty.to_i }, children: [] }
+            item_hash[:details][:qty] += record.total_qty.to_i
+            item_hash[:details][:cost] += record.batch_cost.to_f * record.total_qty.to_i
+            storage_hash[:details][:qty] += record.total_qty.to_i
+            storage_hash[:details][:cost] += record.batch_cost.to_f * record.total_qty.to_i
+          end
+        end
+        results << storage_hash
+      end
+      results
     end
   end
 end
