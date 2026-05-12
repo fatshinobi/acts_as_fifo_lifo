@@ -79,9 +79,13 @@ module ActsAsFifoLifo
     #   * :groups  – summary per item (total qty and cost for the storage)
     #   * :details – list of batches for that storage with their qty and cost
     # The calculation uses the field names configured via `acts_as_fifo`.
-    def stock_balance_by_batches_calculation
-      # base_scope = where.not(@fifo_qty_field => nil)
-      records = group(@fifo_storage_field, @fifo_item_field, @fifo_batch_field)
+    def stock_balance_by_batches_calculation(storage_id: nil, item_id: nil)
+      base_scope = all
+
+      base_scope = base_scope.where(@fifo_storage_field => storage_id) if storage_id.present?
+      base_scope = base_scope.where(@fifo_item_field => item_id) if item_id.present?
+
+      records = base_scope.group(@fifo_storage_field, @fifo_item_field, @fifo_batch_field)
         .select(
           @fifo_storage_field,
           @fifo_item_field,
