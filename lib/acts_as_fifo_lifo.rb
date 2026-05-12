@@ -79,7 +79,12 @@ module ActsAsFifoLifo
     #   * :groups  – summary per item (total qty and cost for the storage)
     #   * :details – list of batches for that storage with their qty and cost
     # The calculation uses the field names configured via `acts_as_fifo`.
-    def stock_balance_by_batches_calculation(storage_id: nil, item_id: nil)
+    def stock_balance_by_batches_calculation(storage_id: nil, item_id: nil, fields_info: {})
+      storage_include = fields_info.dig(:storages, :include) || :storage
+      item_include = fields_info.dig(:items, :include) || :item
+      storage_field = fields_info.dig(:storages, :field) || :name
+      item_field = fields_info.dig(:items, :field) || :name
+
       base_scope = all
 
       base_scope = base_scope.where(@fifo_storage_field => storage_id) if storage_id.present?
@@ -94,20 +99,25 @@ module ActsAsFifoLifo
           "MIN(#{@fifo_cost_field}) AS batch_cost"
         )
 
-      nested_records = records.group_by(&:storage_id).transform_values do |storage_group|
-        storage_group.group_by(&:item_id)
+      records = records.includes(storage_include, item_include)
+
+      nested_records = records.group_by(&@fifo_storage_field.to_sym).transform_values do |storage_group|
+        storage_group.group_by(&@fifo_item_field.to_sym)
       end
 
       results = []
       nested_records.each do |storage_id, items_hash|
+        storage_name = items_hash.first.dig(1, 0)&.send(storage_include)&.send(storage_field) || "Storage #{storage_id}"
         # Level 1: Storage level
         puts "Storage ID: #{storage_id}"
-        storage_hash = { details: { item: "Storage #{storage_id}", qty: 0, batch_cost: "", cost: 0 }, children: [] }
+        storage_hash = { details: { item: storage_name, qty: 0, batch_cost: "", cost: 0 }, children: [] }
 
         items_hash.each do |item_id, records|
+          item_name = records.first&.send(item_include)&.send(item_field) || "Item #{item_id}"
+
           # Level 2: Item level
           puts "  Item ID: #{item_id}"
-          item_hash = { details: { item: "Item #{item_id}", qty: 0, batch_cost: "", cost: 0 }, children: [] }
+          item_hash = { details: { item: item_name, qty: 0, batch_cost: "", cost: 0 }, children: [] }
           storage_hash[:children] << item_hash
 
           # Level 3: Batch records level (each record contains your select aliases)
