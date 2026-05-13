@@ -65,7 +65,8 @@ module ActsAsFifoLifo
          batch_time = rec.first_time
 
          take = [ batch_qty, remaining ].min
-         result << { batch_number: batch_number, qty: take, cost: batch_cost, batch_time: batch_time }
+          # Round cost to two decimal places for consistency
+          result << { batch_number: batch_number, qty: take, cost: batch_cost.round(2), batch_time: batch_time }
          remaining -= take
          break if remaining <= 0
        end
@@ -118,19 +119,30 @@ module ActsAsFifoLifo
           # Level 2: Item level
           puts "  Item ID: #{item_id}"
           item_hash = { details: { item: item_name, qty: 0, batch_cost: "", cost: 0 }, children: [] }
+          # Round item level totals for display
+          item_hash[:details][:cost] = item_hash[:details][:cost].round(2)
+          item_hash[:details][:mean_cost] = item_hash[:details][:mean_cost].round(2) if item_hash[:details][:mean_cost].is_a?(Numeric)
           storage_hash[:children] << item_hash
 
           # Level 3: Batch records level (each record contains your select aliases)
           records.each do |record|
             puts "    Batch ID: #{record.batch_number} | Total Qty: #{record.total_qty} | Cost: #{record.batch_cost}"
-            item_hash[:children] << { details: { item: record.batch_number, qty: record.total_qty.to_i, batch_cost: record.batch_cost.to_f, cost: record.batch_cost.to_f * record.total_qty.to_i }, children: [] }
-            item_hash[:details][:qty] += record.total_qty.to_i
-            item_hash[:details][:cost] += record.batch_cost.to_f * record.total_qty.to_i
-            storage_hash[:details][:qty] += record.total_qty.to_i
-            storage_hash[:details][:cost] += record.batch_cost.to_f * record.total_qty.to_i
+              # Round batch_cost to two decimals for readability
+              batch_cost = record.batch_cost.to_f.round(2)
+              item_hash[:children] << { details: { item: record.batch_number, qty: record.total_qty.to_i, batch_cost: batch_cost, cost: (batch_cost * record.total_qty.to_i).round(2) }, children: [] }
+              item_hash[:details][:qty] += record.total_qty.to_i
+              # Use rounded batch_cost for accurate total cost aggregation
+              batch_cost = record.batch_cost.to_f.round(2)
+              total_batch_cost = (batch_cost * record.total_qty.to_i).round(2)
+              item_hash[:details][:cost] = (item_hash[:details][:cost] + total_batch_cost).round(2)
+              storage_hash[:details][:qty] += record.total_qty.to_i
+              storage_hash[:details][:cost] = (storage_hash[:details][:cost] + total_batch_cost).round(2)
           end
         end
-        results << storage_hash
+          # Round storage level totals for display
+          storage_hash[:details][:cost] = storage_hash[:details][:cost].round(2)
+          storage_hash[:details][:mean_cost] = storage_hash[:details][:mean_cost].round(2) if storage_hash[:details][:mean_cost].is_a?(Numeric)
+          results << storage_hash
       end
       results
     end
@@ -177,12 +189,18 @@ module ActsAsFifoLifo
            recs.each do |record|
              qty = record.total_qty.to_i
              cost_per = record.item_cost.to_f
-             total_cost = qty * cost_per
+              # Calculate total cost with two decimal precision
+              total_cost = (qty * cost_per).round(2)
              item_hash[:details][:qty] += qty
              item_hash[:details][:cost] += total_cost
-             item_hash[:details][:mean_cost] = item_hash[:details][:cost] / item_hash[:details][:qty] if item_hash[:details][:qty] > 0
+              # Calculate mean cost with two decimal precision to avoid floating point artifacts
+              if item_hash[:details][:qty] > 0
+                mean = item_hash[:details][:cost] / item_hash[:details][:qty]
+                item_hash[:details][:mean_cost] = mean.round(2)
+              end
              storage_hash[:details][:qty] += qty
-             storage_hash[:details][:cost] += total_cost
+              # Accumulate cost with high precision then round when presenting
+              storage_hash[:details][:cost] += total_cost
            end
 
            storage_hash[:children] << item_hash
