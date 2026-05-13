@@ -134,6 +134,65 @@ module ActsAsFifoLifo
       end
       results
     end
+
+    def stock_balance_by_items_calculation(storage_id: nil, item_id: nil, fields_info: {})
+      storage_include = fields_info.dig(:storages, :include) || :storage
+      item_include = fields_info.dig(:items, :include) || :item
+      storage_field = fields_info.dig(:storages, :field) || :name
+      item_field = fields_info.dig(:items, :field) || :name
+
+      base_scope = all
+
+      base_scope = base_scope.where(@fifo_storage_field => storage_id) if storage_id.present?
+      base_scope = base_scope.where(@fifo_item_field => item_id) if item_id.present?
+
+      records = base_scope.group(@fifo_storage_field, @fifo_item_field)
+        .select(
+          @fifo_storage_field,
+          @fifo_item_field,
+          "SUM(#{@fifo_qty_field}) AS total_qty",
+          "SUM(#{@fifo_cost_field} * #{@fifo_qty_field}) / SUM(#{@fifo_qty_field}) AS item_cost"
+        )
+
+       records = records.includes(storage_include, item_include)
+       results = []
+
+       # Group records by storage then by item to build nested structure
+       nested = records.group_by(&@fifo_storage_field.to_sym).transform_values do |storage_group|
+         storage_group.group_by(&@fifo_item_field.to_sym)
+       end
+
+       nested.each do |storage_id, items_hash|
+         # Resolve storage name via association
+         first_record = items_hash.values.first.first
+         storage_name = first_record&.send(storage_include)&.send(storage_field) || "Storage #{storage_id}"
+
+         storage_hash = { details: { item: storage_name, qty: 0, mean_cost: "", cost: 0.0 }, children: [] }
+
+         items_hash.each do |item_id, recs|
+           first_item = recs.first
+           item_name = first_item&.send(item_include)&.send(item_field) || "Item #{item_id}"
+           item_hash = { details: { item: item_name, qty: 0, mean_cost: 0.0, cost: 0.0 }, children: [] }
+
+           recs.each do |record|
+             qty = record.total_qty.to_i
+             cost_per = record.item_cost.to_f
+             total_cost = qty * cost_per
+             item_hash[:details][:qty] += qty
+             item_hash[:details][:cost] += total_cost
+             item_hash[:details][:mean_cost] = item_hash[:details][:cost] / item_hash[:details][:qty] if item_hash[:details][:qty] > 0
+             storage_hash[:details][:qty] += qty
+             storage_hash[:details][:cost] += total_cost
+           end
+
+           storage_hash[:children] << item_hash
+         end
+
+         results << storage_hash
+       end
+
+       results
+    end
   end
 end
 
