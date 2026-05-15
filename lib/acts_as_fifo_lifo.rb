@@ -259,12 +259,12 @@ module ActsAsFifoLifo
         # Resolve storage name for display
         first_record = items_hash.values.first.first
         storage_name = first_record&.send(storage_include)&.send(storage_field) || "Storage #{storage_id_key}"
-        storage_hash = { details: { item: storage_name, operation: "", qty: 0, cost: "", balance: 0 }, children: [] }
+        storage_hash = { details: { item: storage_name, time: "", operation: "", qty: 0, cost: "", balance: 0 }, children: [] }
 
         items_hash.each do |item_id_key, recs|
           first_item = recs.first
           item_name = first_item&.send(item_include)&.send(item_field) || "Item #{item_id_key}"
-          item_hash = { details: { item: item_name, operation: "", qty: 0, cost: "", balance: 0 }, children: [] }
+          item_hash = { details: { item: item_name, time: "", operation: "", qty: 0, cost: "", balance: 0 }, children: [] }
 
           running_balance = 0
           recs.each do |record|
@@ -276,6 +276,7 @@ module ActsAsFifoLifo
               item_hash[:children] << {
                 details: {
                   item: record.send(@fifo_batch_field),
+                  time: record.send(@fifo_time_field).strftime("%F %T"),
                   operation: "#{record.send(@fifo_operation_type_field)} ##{record.send(@fifo_operation_field)}",
                   qty: qty,
                   cost: cost.round(2),
