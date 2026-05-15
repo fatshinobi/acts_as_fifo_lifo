@@ -18,13 +18,15 @@ module ActsAsFifoLifo
     # The method simply stores the provided field names in instance variables so they can be
     # used later in the FIFO/LIFO logic.
 
-    def acts_as_fifo(item_field:, qty_field:, cost_field:, time_field:, batch_field:, storage_field:)
+    def acts_as_fifo(item_field:, qty_field:, cost_field:, time_field:, batch_field:, storage_field:, operation_field:, operation_type_field:)
       @fifo_item_field   = item_field
       @fifo_qty_field    = qty_field
       @fifo_cost_field   = cost_field
       @fifo_time_field   = time_field
       @fifo_batch_field  = batch_field
       @fifo_storage_field = storage_field
+      @fifo_operation_field = operation_field
+      @fifo_operation_type_field = operation_type_field
     end
 
     # Returns an ordered list of batches needed to satisfy a quantity request.
@@ -239,7 +241,9 @@ module ActsAsFifoLifo
           @fifo_batch_field,
           @fifo_time_field,
           @fifo_qty_field,
-          @fifo_cost_field
+          @fifo_cost_field,
+          @fifo_operation_field,
+          @fifo_operation_type_field
         )
         .order(@fifo_time_field => :asc)
 
@@ -255,12 +259,12 @@ module ActsAsFifoLifo
         # Resolve storage name for display
         first_record = items_hash.values.first.first
         storage_name = first_record&.send(storage_include)&.send(storage_field) || "Storage #{storage_id_key}"
-        storage_hash = { details: { item: storage_name, qty: 0, cost: "", balance: 0 }, children: [] }
+        storage_hash = { details: { item: storage_name, time: "", operation: "", qty: 0, cost: "", balance: 0 }, children: [] }
 
         items_hash.each do |item_id_key, recs|
           first_item = recs.first
           item_name = first_item&.send(item_include)&.send(item_field) || "Item #{item_id_key}"
-          item_hash = { details: { item: item_name, qty: 0, cost: "", balance: 0 }, children: [] }
+          item_hash = { details: { item: item_name, time: "", operation: "", qty: 0, cost: "", balance: 0 }, children: [] }
 
           running_balance = 0
           recs.each do |record|
@@ -268,16 +272,18 @@ module ActsAsFifoLifo
             cost = record.send(@fifo_cost_field).to_f
             running_balance += qty
 
-            # Append child representing this transaction (batch)
-            item_hash[:children] << {
-              details: {
-                item: record.send(@fifo_batch_field),
-                qty: qty,
-                cost: cost.round(2),
-                balance: running_balance
-              },
-              children: []
-            }
+              # Append child representing this transaction (batch)
+              item_hash[:children] << {
+                details: {
+                  item: record.send(@fifo_batch_field),
+                  time: record.send(@fifo_time_field).strftime("%F %T"),
+                  operation: "#{record.send(@fifo_operation_type_field)} ##{record.send(@fifo_operation_field)}",
+                  qty: qty,
+                  cost: cost.round(2),
+                  balance: running_balance
+                },
+                children: []
+              }
 
             # Accumulate totals for the item level
             item_hash[:details][:qty] += qty
