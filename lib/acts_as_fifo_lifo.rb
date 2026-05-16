@@ -223,15 +223,18 @@ module ActsAsFifoLifo
     # The implementation mirrors `stock_balance_by_items_calculation` but adds a
     # running balance column. It uses the same `fields_info` hash to resolve the
     # association names for storage and item includes.
-    def stock_movement_calculation(storage_id: nil, item_id: nil, fields_info: {})
+    def stock_movement_calculation(storage_id: nil, item_id: nil, start_time: nil, end_time: nil, fields_info: {})
       storage_include = fields_info.dig(:storages, :include) || :storage
       item_include = fields_info.dig(:items, :include) || :item
       storage_field = fields_info.dig(:storages, :field) || :name
       item_field = fields_info.dig(:items, :field) || :name
 
+      balances = balance_for(start_time, item_id = item_id, store_id = storage_id)
+
       base_scope = all
       base_scope = base_scope.where(@fifo_storage_field => storage_id) if storage_id.present?
       base_scope = base_scope.where(@fifo_item_field => item_id) if item_id.present?
+      base_scope = base_scope.where(@fifo_time_field => start_time..end_time) if start_time.present? && end_time.present?
 
       # Pull raw transaction rows ordered by time so we can compute a running balance.
       records = base_scope
@@ -264,9 +267,10 @@ module ActsAsFifoLifo
         items_hash.each do |item_id_key, recs|
           first_item = recs.first
           item_name = first_item&.send(item_include)&.send(item_field) || "Item #{item_id_key}"
-          item_hash = { details: { item: item_name, time: "", operation: "", qty: 0, cost: "", balance: 0 }, children: [] }
+          item_balance = balances[[ item_id_key, storage_id_key ]] || 0
+          item_hash = { details: { item: item_name, time: "", operation: "", qty: 0, cost: "", balance: item_balance }, children: [] }
 
-          running_balance = 0
+          running_balance = item_balance
           recs.each do |record|
             qty = record.send(@fifo_qty_field).to_i
             cost = record.send(@fifo_cost_field).to_f
@@ -287,7 +291,6 @@ module ActsAsFifoLifo
 
             # Accumulate totals for the item level
             item_hash[:details][:qty] += qty
-            item_hash[:details][:balance] = running_balance
           end
 
           storage_hash[:children] << item_hash
@@ -299,6 +302,27 @@ module ActsAsFifoLifo
         results << storage_hash
       end
       results
+    end
+
+    def balance_for(to_time, item_id = nil, store_id = nil)
+      item_scope = item_id.present? ? where(@fifo_item_field => item_id) : all
+      store_scope = store_id.present? ? item_scope.where(@fifo_storage_field => store_id) : item_scope
+
+      result = store_scope
+        .where("#{@fifo_time_field} <= ?", to_time)
+        .group(@fifo_storage_field, @fifo_item_field)
+        .select(
+          @fifo_storage_field,
+          @fifo_item_field,
+          "SUM(#{@fifo_qty_field}) AS total_qty"
+        )
+
+      # convert the result to a hash with item_id and store_id as keys for easy lookup
+      result.each_with_object({}) do |record, hash|
+        item_id_key = record.send(@fifo_item_field)
+        store_id_key = record.send(@fifo_storage_field)
+        hash[[ item_id_key, store_id_key ]] = record.total_qty.to_i
+      end
     end
   end
 end
