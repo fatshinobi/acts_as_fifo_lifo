@@ -301,6 +301,27 @@ module ActsAsFifoLifo
       end
       results
     end
+
+    def balance_for(to_time, item_id = nil, store_id = nil)
+      item_scope = item_id.present? ? where(@fifo_item_field => item_id) : all
+      store_scope = store_id.present? ? item_scope.where(@fifo_storage_field => store_id) : item_scope
+
+      result = store_scope
+        .where("#{@fifo_time_field} >= ?", to_time)
+        .group(@fifo_storage_field, @fifo_item_field)
+        .select(
+          @fifo_storage_field,
+          @fifo_item_field,
+          "SUM(#{@fifo_qty_field}) AS total_qty"
+        )
+
+      # convert the result to a hash with item_id and store_id as keys for easy lookup
+      result.each_with_object({}) do |record, hash|
+        item_id_key = record.send(@fifo_item_field)
+        store_id_key = record.send(@fifo_storage_field)
+        hash[[ item_id_key, store_id_key ]] = record.total_qty.to_i
+      end
+    end
   end
 end
 
