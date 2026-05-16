@@ -149,7 +149,7 @@ module ActsAsFifoLifo
       results
     end
 
-    def stock_balance_by_items_calculation(storage_id: nil, item_id: nil, fields_info: {})
+    def stock_balance_by_items_calculation(storage_id: nil, item_id: nil, to_time: nil, fields_info: {})
       storage_include = fields_info.dig(:storages, :include) || :storage
       item_include = fields_info.dig(:items, :include) || :item
       storage_field = fields_info.dig(:storages, :field) || :name
@@ -159,6 +159,7 @@ module ActsAsFifoLifo
 
       base_scope = base_scope.where(@fifo_storage_field => storage_id) if storage_id.present?
       base_scope = base_scope.where(@fifo_item_field => item_id) if item_id.present?
+      base_scope = base_scope.where(@fifo_time_field => ...to_time) if to_time.present?
 
       records = base_scope.group(@fifo_storage_field, @fifo_item_field)
         .select(
@@ -191,15 +192,15 @@ module ActsAsFifoLifo
            recs.each do |record|
              qty = record.total_qty.to_i
              cost_per = record.item_cost.to_f
-              # Calculate total cost with two decimal precision
-              total_cost = (qty * cost_per).round(2)
+             # Calculate total cost with two decimal precision
+             total_cost = (qty * cost_per).round(2)
              item_hash[:details][:qty] += qty
              item_hash[:details][:cost] += total_cost
-              # Calculate mean cost with two decimal precision to avoid floating point artifacts
-              if item_hash[:details][:qty] > 0
+             # Calculate mean cost with two decimal precision to avoid floating point artifacts
+             if item_hash[:details][:qty] > 0
                 mean = item_hash[:details][:cost] / item_hash[:details][:qty]
                 item_hash[:details][:mean_cost] = mean.round(2)
-              end
+             end
              storage_hash[:details][:qty] += qty
               # Accumulate cost with high precision then round when presenting
               storage_hash[:details][:cost] += total_cost
