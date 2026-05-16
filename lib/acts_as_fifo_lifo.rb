@@ -291,7 +291,6 @@ module ActsAsFifoLifo
 
             # Accumulate totals for the item level
             item_hash[:details][:qty] += qty
-            # item_hash[:details][:balance] = running_balance
           end
 
           storage_hash[:children] << item_hash
