@@ -229,6 +229,8 @@ module ActsAsFifoLifo
       storage_field = fields_info.dig(:storages, :field) || :name
       item_field = fields_info.dig(:items, :field) || :name
 
+      balances = balance_for(start_time, item_id = item_id, store_id = storage_id)
+
       base_scope = all
       base_scope = base_scope.where(@fifo_storage_field => storage_id) if storage_id.present?
       base_scope = base_scope.where(@fifo_item_field => item_id) if item_id.present?
@@ -265,9 +267,10 @@ module ActsAsFifoLifo
         items_hash.each do |item_id_key, recs|
           first_item = recs.first
           item_name = first_item&.send(item_include)&.send(item_field) || "Item #{item_id_key}"
-          item_hash = { details: { item: item_name, time: "", operation: "", qty: 0, cost: "", balance: 0 }, children: [] }
+          item_balance = balances[[ item_id_key, storage_id_key ]] || 0
+          item_hash = { details: { item: item_name, time: "", operation: "", qty: 0, cost: "", balance: item_balance }, children: [] }
 
-          running_balance = 0
+          running_balance = item_balance
           recs.each do |record|
             qty = record.send(@fifo_qty_field).to_i
             cost = record.send(@fifo_cost_field).to_f
@@ -288,7 +291,7 @@ module ActsAsFifoLifo
 
             # Accumulate totals for the item level
             item_hash[:details][:qty] += qty
-            item_hash[:details][:balance] = running_balance
+            # item_hash[:details][:balance] = running_balance
           end
 
           storage_hash[:children] << item_hash
@@ -307,7 +310,7 @@ module ActsAsFifoLifo
       store_scope = store_id.present? ? item_scope.where(@fifo_storage_field => store_id) : item_scope
 
       result = store_scope
-        .where("#{@fifo_time_field} >= ?", to_time)
+        .where("#{@fifo_time_field} <= ?", to_time)
         .group(@fifo_storage_field, @fifo_item_field)
         .select(
           @fifo_storage_field,
