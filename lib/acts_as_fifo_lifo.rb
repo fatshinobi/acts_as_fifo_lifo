@@ -223,7 +223,7 @@ module ActsAsFifoLifo
     # The implementation mirrors `stock_balance_by_items_calculation` but adds a
     # running balance column. It uses the same `fields_info` hash to resolve the
     # association names for storage and item includes.
-    def stock_movement_calculation(storage_id: nil, item_id: nil, fields_info: {})
+    def stock_movement_calculation(storage_id: nil, item_id: nil, start_time: nil, end_time: nil, fields_info: {})
       storage_include = fields_info.dig(:storages, :include) || :storage
       item_include = fields_info.dig(:items, :include) || :item
       storage_field = fields_info.dig(:storages, :field) || :name
@@ -232,6 +232,7 @@ module ActsAsFifoLifo
       base_scope = all
       base_scope = base_scope.where(@fifo_storage_field => storage_id) if storage_id.present?
       base_scope = base_scope.where(@fifo_item_field => item_id) if item_id.present?
+      base_scope = base_scope.where(@fifo_time_field => start_time..end_time) if start_time.present? && end_time.present?
 
       # Pull raw transaction rows ordered by time so we can compute a running balance.
       records = base_scope
