@@ -18,7 +18,7 @@ module ActsAsFifoLifo
     # The method simply stores the provided field names in instance variables so they can be
     # used later in the FIFO/LIFO logic.
 
-    def acts_as_fifo(item_field:, qty_field:, cost_field:, time_field:, batch_field:, storage_field:, operation_field:, operation_type_field:)
+    def acts_as_fifo_lifo(item_field:, qty_field:, cost_field:, time_field:, batch_field:, storage_field:, operation_field:, operation_type_field:)
       @fifo_item_field   = item_field
       @fifo_qty_field    = qty_field
       @fifo_cost_field   = cost_field
@@ -36,7 +36,7 @@ module ActsAsFifoLifo
     # @param store_id [Integer] the identifier of the storage location
     # @param qty [Integer] the required quantity
     # @return [Array<Hash{batch_number: String, qty: Integer}>]
-    def get_batches_for(item_id, store_id, qty)
+    def get_batches_for(item_id, store_id, qty, method: "fifo")
       # Build a base scope using the configured field names.
       base_scope = where(
         @fifo_item_field => item_id,
@@ -46,6 +46,8 @@ module ActsAsFifoLifo
        # Build a query that groups by batch, sums the quantity, and orders
        # batches by the earliest transaction time using MIN to satisfy
        # ONLY_FULL_GROUP_BY.
+       order_direction = method == "fifo" ? "ASC" : "DESC"
+
        batch_records = base_scope
          .group(@fifo_batch_field)
          .select(
@@ -55,7 +57,7 @@ module ActsAsFifoLifo
            "MIN(#{@fifo_time_field}) AS first_time"
          )
          .having("SUM(#{@fifo_qty_field}) > 0")
-         .order("first_time ASC")
+         .order("first_time #{order_direction}")
 
        result = []
        remaining = qty
