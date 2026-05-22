@@ -36,7 +36,7 @@ module ActsAsFifoLifo
     # @param store_id [Integer] the identifier of the storage location
     # @param qty [Integer] the required quantity
     # @return [Array<Hash{batch_number: String, qty: Integer}>]
-    def get_batches_for(item_id, store_id, qty, method: "fifo")
+    def get_batches_for(item_id, store_id, qty, time_at, method: "fifo")
       # Build a base scope using the configured field names.
       base_scope = where(
         @fifo_item_field => item_id,
@@ -56,6 +56,7 @@ module ActsAsFifoLifo
            "MIN(#{@fifo_cost_field}) AS total_cost",
            "MIN(#{@fifo_time_field}) AS first_time"
          )
+         .where("#{@fifo_time_field} <= ?", time_at)
          .having("SUM(#{@fifo_qty_field}) > 0")
          .order("first_time #{order_direction}")
 
