@@ -329,6 +329,41 @@ module ActsAsFifoLifo
         hash[[ item_id_key, store_id_key ]] = record.total_qty.to_i
       end
     end
+
+    def stock_balance_for_items(item_id: nil, to_time: nil, limit: nil, fields_info: {})
+      scope = all
+      scope = scope.where(@fifo_item_field => item_id) if item_id.present?
+      scope = scope.where("#{@fifo_time_field} <= ?", to_time) if to_time.present?
+      scope = scope.group(@fifo_item_field)
+        .select(
+          @fifo_item_field,
+          "SUM(#{@fifo_qty_field}) AS total_qty",
+          "SUM(#{@fifo_cost_field} * #{@fifo_qty_field}) / SUM(#{@fifo_qty_field}) AS mean_cost"
+        )
+      scope = scope.order("total_qty DESC")
+      item_include = fields_info.dig(:items, :include) || :item
+
+      scope = scope.includes(item_include)
+      scope = scope.limit(limit) if limit.present?
+      scope
+    end
+
+    def stock_balance_for_items_calculation(item_id: nil, to_time: nil, fields_info: {})
+      records = stock_balance_for_items(item_id: item_id, to_time: to_time, fields_info: fields_info)
+      item_include = fields_info.dig(:items, :include) || :item
+      item_field = fields_info.dig(:items, :field) || :name
+
+      records.map do |record|
+        {
+          details: {
+            item: record.send(item_include)&.send(item_field),
+            qty: record.total_qty,
+            cost: record.mean_cost.round(2)
+          },
+          children: []
+        }
+      end
+    end
   end
 end
 
