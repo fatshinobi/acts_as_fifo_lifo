@@ -40,7 +40,6 @@ module ActsAsFifoLifo
     # @param method [String] "fifo" for ascending order or "lifo" for descending order
     # @return [Array<Hash{batch_number: String, qty: Integer, cost: Float, batch_time: Time}>]
     def get_batches_for(item_id, store_id, qty, time_at, method: "fifo")
-      # Build a base scope using the configured field names.
       base_scope = where(
         @fifo_item_field => item_id,
         @fifo_storage_field => store_id
@@ -126,7 +125,6 @@ module ActsAsFifoLifo
 
           # Level 2: Item level
           item_hash = { details: { item: item_name, qty: 0, batch_cost: "", cost: 0 }, children: [] }
-          # Round item level totals for display
           item_hash[:details][:cost] = item_hash[:details][:cost].round(2)
           item_hash[:details][:mean_cost] = item_hash[:details][:mean_cost].round(2) if item_hash[:details][:mean_cost].is_a?(Numeric)
           storage_hash[:children] << item_hash
@@ -151,6 +149,15 @@ module ActsAsFifoLifo
       results
     end
 
+    # Calculates stock balance grouped by storage and item.
+    # Returns a nested array of hashes with :details and :children keys.
+    # Each element represents a storage location containing items with their mean cost.
+    #
+    # @param storage_id [Integer, nil] optional storage location filter
+    # @param item_id [Integer, nil] optional item filter
+    # @param to_time [Time, nil] optional upper bound timestamp for transactions
+    # @param fields_info [Hash] association field configuration for :storages and :items
+    # @return [Array<Hash{details: Hash, children: Array>]: nested structure with storage->items
     def stock_balance_by_items_calculation(storage_id: nil, item_id: nil, to_time: nil, fields_info: {})
       storage_include = fields_info.dig(:storages, :include) || :storage
       item_include = fields_info.dig(:items, :include) || :item
@@ -174,13 +181,11 @@ module ActsAsFifoLifo
        records = records.includes(storage_include, item_include)
        results = []
 
-       # Group records by storage then by item to build nested structure
        nested = records.group_by(&@fifo_storage_field.to_sym).transform_values do |storage_group|
          storage_group.group_by(&@fifo_item_field.to_sym)
        end
 
        nested.each do |storage_id, items_hash|
-         # Resolve storage name via association
          first_record = items_hash.values.first.first
          storage_name = first_record&.send(storage_include)&.send(storage_field) || "Storage #{storage_id}"
 
@@ -194,17 +199,14 @@ module ActsAsFifoLifo
            recs.each do |record|
              qty = record.total_qty.to_i
              cost_per = record.item_cost.to_f
-             # Calculate total cost with two decimal precision
              total_cost = (qty * cost_per).round(2)
              item_hash[:details][:qty] += qty
              item_hash[:details][:cost] += total_cost
-             # Calculate mean cost with two decimal precision to avoid floating point artifacts
              if item_hash[:details][:qty] > 0
                 mean = item_hash[:details][:cost] / item_hash[:details][:qty]
                 item_hash[:details][:mean_cost] = mean.round(2)
              end
              storage_hash[:details][:qty] += qty
-              # Accumulate cost with high precision then round when presenting
               storage_hash[:details][:cost] += total_cost
            end
 
@@ -241,7 +243,6 @@ module ActsAsFifoLifo
       base_scope = base_scope.where(@fifo_item_field => item_id) if item_id.present?
       base_scope = base_scope.where(@fifo_time_field => start_time..end_time) if start_time.present? && end_time.present?
 
-      # Pull raw transaction rows ordered by time so we can compute a running balance.
       records = base_scope
         .select(
           @fifo_storage_field,
@@ -257,14 +258,12 @@ module ActsAsFifoLifo
 
       records = records.includes(storage_include, item_include)
 
-      # Group by storage then by item to build the required hierarchy.
       nested = records.group_by(&@fifo_storage_field.to_sym).transform_values do |storage_group|
         storage_group.group_by(&@fifo_item_field.to_sym)
       end
 
       results = []
       nested.each do |storage_id_key, items_hash|
-        # Resolve storage name for display
         first_record = items_hash.values.first.first
         storage_name = first_record&.send(storage_include)&.send(storage_field) || "Storage #{storage_id_key}"
         storage_hash = { details: { item: storage_name, time: "", operation: "", qty: 0, cost: "", balance: 0 }, children: [] }
@@ -281,7 +280,6 @@ module ActsAsFifoLifo
             cost = record.send(@fifo_cost_field).to_f
             running_balance += qty
 
-              # Append child representing this transaction (batch)
               item_hash[:children] << {
                 details: {
                   item: record.send(@fifo_batch_field),
@@ -294,12 +292,11 @@ module ActsAsFifoLifo
                 children: []
               }
 
-            # Accumulate totals for the item level
             item_hash[:details][:qty] += qty
           end
 
           storage_hash[:children] << item_hash
-          # Update storage aggregates
+
           storage_hash[:details][:qty] += item_hash[:details][:qty]
           storage_hash[:details][:balance] += item_hash[:details][:balance]
         end
@@ -322,7 +319,6 @@ module ActsAsFifoLifo
           "SUM(#{@fifo_qty_field}) AS total_qty"
         )
 
-      # convert the result to a hash with item_id and store_id as keys for easy lookup
       result.each_with_object({}) do |record, hash|
         item_id_key = record.send(@fifo_item_field)
         store_id_key = record.send(@fifo_storage_field)
