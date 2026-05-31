@@ -5,18 +5,19 @@ module ActsAsFifoLifo
   extend ActiveSupport::Concern
 
   class_methods do
-    # Implements FIFO/LIFO behavior configuration.
+    # Configures FIFO/LIFO behavior field mappings for the model.
     #
-    # @param options [Hash] configuration options
-    # @option options [Symbol,String] :item_field   Field name for the item identifier
-    # @option options [Symbol,String] :qty_field    Field name for the quantity
-    # @option options [Symbol,String] :cost_field   Field name for the cost
-    # @option options [Symbol,String] :time_field   Field name for the timestamp
-    # @option options [Symbol,String] :batch_field  Field name for the batch identifier
-    # @option options [Symbol,String] :storage_field Field name for the storage identifier
+    # Stores field name mappings as class-level instance variables for use in
+    # FIFO/LIFO calculation methods. All parameters are required keyword arguments.
     #
-    # The method simply stores the provided field names in instance variables so they can be
-    # used later in the FIFO/LIFO logic.
+    # @param item_field [Symbol,String] Field name for the item identifier
+    # @param qty_field [Symbol,String] Field name for the quantity
+    # @param cost_field [Symbol,String] Field name for the cost
+    # @param time_field [Symbol,String] Field name for the timestamp
+    # @param batch_field [Symbol,String] Field name for the batch identifier
+    # @param storage_field [Symbol,String] Field name for the storage identifier
+    # @param operation_field [Symbol,String] Field name for the operation identifier
+    # @param operation_type_field [Symbol,String] Field name for the operation type
 
     def acts_as_fifo_lifo(item_field:, qty_field:, cost_field:, time_field:, batch_field:, storage_field:, operation_field:, operation_type_field:)
       @fifo_item_field   = item_field
