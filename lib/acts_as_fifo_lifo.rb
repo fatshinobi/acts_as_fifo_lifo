@@ -119,14 +119,12 @@ module ActsAsFifoLifo
       nested_records.each do |storage_id, items_hash|
         storage_name = items_hash.first.dig(1, 0)&.send(storage_include)&.send(storage_field) || "Storage #{storage_id}"
         # Level 1: Storage level
-        puts "Storage ID: #{storage_id}"
         storage_hash = { details: { item: storage_name, qty: 0, batch_cost: "", cost: 0 }, children: [] }
 
         items_hash.each do |item_id, records|
           item_name = records.first&.send(item_include)&.send(item_field) || "Item #{item_id}"
 
           # Level 2: Item level
-          puts "  Item ID: #{item_id}"
           item_hash = { details: { item: item_name, qty: 0, batch_cost: "", cost: 0 }, children: [] }
           # Round item level totals for display
           item_hash[:details][:cost] = item_hash[:details][:cost].round(2)
@@ -135,12 +133,10 @@ module ActsAsFifoLifo
 
           # Level 3: Batch records level (each record contains your select aliases)
           records.each do |record|
-            puts "    Batch ID: #{record.batch_number} | Total Qty: #{record.total_qty} | Cost: #{record.batch_cost}"
-              # Round batch_cost to two decimals for readability
               batch_cost = record.batch_cost.to_f.round(2)
               item_hash[:children] << { details: { item: record.batch_number, qty: record.total_qty.to_i, batch_cost: batch_cost, cost: (batch_cost * record.total_qty.to_i).round(2) }, children: [] }
               item_hash[:details][:qty] += record.total_qty.to_i
-              # Use rounded batch_cost for accurate total cost aggregation
+
               batch_cost = record.batch_cost.to_f.round(2)
               total_batch_cost = (batch_cost * record.total_qty.to_i).round(2)
               item_hash[:details][:cost] = (item_hash[:details][:cost] + total_batch_cost).round(2)
@@ -148,7 +144,6 @@ module ActsAsFifoLifo
               storage_hash[:details][:cost] = (storage_hash[:details][:cost] + total_batch_cost).round(2)
           end
         end
-          # Round storage level totals for display
           storage_hash[:details][:cost] = storage_hash[:details][:cost].round(2)
           storage_hash[:details][:mean_cost] = storage_hash[:details][:mean_cost].round(2) if storage_hash[:details][:mean_cost].is_a?(Numeric)
           results << storage_hash
@@ -222,15 +217,17 @@ module ActsAsFifoLifo
        results
     end
 
-    # Calculates stock movement for items, returning a two‑level nested structure.
-    # The first level groups by item and shows the total balance (sum of qty) and
-    # the average cost for that item. The second level lists each transaction
-    # (grouped by batch) in chronological order, showing the running balance
-    # after applying the transaction quantity.
+    # Calculates stock movement returning a three-level nested structure.
+    # Groups by storage (Level 1), then by item (Level 2), then by batch/transaction (Level 3).
+    # Each transaction record includes running balance computed from the initial balance plus
+    # all preceding transactions in chronological order.
     #
-    # The implementation mirrors `stock_balance_by_items_calculation` but adds a
-    # running balance column. It uses the same `fields_info` hash to resolve the
-    # association names for storage and item includes.
+    # @param storage_id [Integer, nil] optional storage location filter
+    # @param item_id [Integer, nil] optional item filter
+    # @param start_time [Time, nil] lower bound timestamp for transactions
+    # @param end_time [Time, nil] upper bound timestamp for transactions
+    # @param fields_info [Hash] association field configuration for :storages and :items
+    # @return [Array<Hash{details: Hash, children: Array>]: nested structure with storage->items->transactions
     def stock_movement_calculation(storage_id: nil, item_id: nil, start_time: nil, end_time: nil, fields_info: {})
       storage_include = fields_info.dig(:storages, :include) || :storage
       item_include = fields_info.dig(:items, :include) || :item
