@@ -31,12 +31,14 @@ module ActsAsFifoLifo
     end
 
     # Returns an ordered list of batches needed to satisfy a quantity request.
-    # Each element is a hash with :batch_number and :qty keys.
+    # Each element is a hash with :batch_number, :qty, :cost, and :batch_time keys.
     #
     # @param item_id [Integer] the identifier of the item
     # @param store_id [Integer] the identifier of the storage location
     # @param qty [Integer] the required quantity
-    # @return [Array<Hash{batch_number: String, qty: Integer}>]
+    # @param time_at [Time,DateTime,String] the reference timestamp for filtering transactions
+    # @param method [String] "fifo" for ascending order or "lifo" for descending order
+    # @return [Array<Hash{batch_number: String, qty: Integer, cost: Float, batch_time: Time}>]
     def get_batches_for(item_id, store_id, qty, time_at, method: "fifo")
       # Build a base scope using the configured field names.
       base_scope = where(
