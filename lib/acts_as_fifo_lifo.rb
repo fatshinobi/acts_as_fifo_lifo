@@ -18,7 +18,6 @@ module ActsAsFifoLifo
     # @param storage_field [Symbol,String] Field name for the storage identifier
     # @param operation_field [Symbol,String] Field name for the operation identifier
     # @param operation_type_field [Symbol,String] Field name for the operation type
-
     def acts_as_fifo_lifo(item_field:, qty_field:, cost_field:, time_field:, batch_field:, storage_field:, operation_field:, operation_type_field:)
       @fifo_item_field   = item_field
       @fifo_qty_field    = qty_field
@@ -306,6 +305,13 @@ module ActsAsFifoLifo
       results
     end
 
+    # Computes initial stock balances for items at a given point in time.
+    # Returns a hash mapping [item_id, storage_id] pairs to their balance quantities.
+    #
+    # @param to_time [Time] the reference timestamp for the balance calculation
+    # @param item_id [Integer, nil] optional item filter
+    # @param store_id [Integer, nil] optional storage location filter
+    # @return [Hash{Array<item_id, storage_id> => Integer] mapping of item-storage pairs to quantities
     def balance_for(to_time, item_id = nil, store_id = nil)
       item_scope = item_id.present? ? where(@fifo_item_field => item_id) : all
       store_scope = store_id.present? ? item_scope.where(@fifo_storage_field => store_id) : item_scope
@@ -326,6 +332,14 @@ module ActsAsFifoLifo
       end
     end
 
+    # Queries aggregate stock data for items using mean cost calculation.
+    # Returns an ActiveRecord::Relation with total_qty and mean_cost selected per item.
+    #
+    # @param item_id [Integer, nil] optional item filter
+    # @param to_time [Time, nil] optional upper bound timestamp for transactions
+    # @param limit [Integer, nil] optional limit on number of results
+    # @param fields_info [Hash] association field configuration for :items
+    # @return [ActiveRecord::Relation] query scope for further chaining or execution
     def stock_balance_for_items(item_id: nil, to_time: nil, limit: nil, fields_info: {})
       scope = all
       scope = scope.where(@fifo_item_field => item_id) if item_id.present?
@@ -344,6 +358,13 @@ module ActsAsFifoLifo
       scope
     end
 
+    # Transforms item stock balance records into a structured format.
+    # Wraps each item's data in a :details/:children hash structure.
+    #
+    # @param item_id [Integer, nil] optional item filter
+    # @param to_time [Time, nil] optional upper bound timestamp for transactions
+    # @param fields_info [Hash] association field configuration for :items
+    # @return [Array<Hash{details: Hash, children: Array>]: array of item summaries with qty and mean_cost
     def stock_balance_for_items_calculation(item_id: nil, to_time: nil, fields_info: {})
       records = stock_balance_for_items(item_id: item_id, to_time: to_time, fields_info: fields_info)
       item_include = fields_info.dig(:items, :include) || :item
