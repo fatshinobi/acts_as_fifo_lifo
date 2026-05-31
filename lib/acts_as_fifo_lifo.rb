@@ -46,9 +46,6 @@ module ActsAsFifoLifo
         @fifo_storage_field => store_id
       )
 
-       # Build a query that groups by batch, sums the quantity, and orders
-       # batches by the earliest transaction time using MIN to satisfy
-       # ONLY_FULL_GROUP_BY.
        order_direction = method == "fifo" ? "ASC" : "DESC"
 
        batch_records = base_scope
@@ -73,7 +70,6 @@ module ActsAsFifoLifo
          batch_time = rec.first_time
 
          take = [ batch_qty, remaining ].min
-          # Round cost to two decimal places for consistency
           result << { batch_number: batch_number, qty: take, cost: batch_cost.round(2), batch_time: batch_time }
          remaining -= take
          break if remaining <= 0
@@ -83,11 +79,15 @@ module ActsAsFifoLifo
     end
 
     # Calculates stock balance grouped by storage, item and batch.
-    # Returns an array of hashes where each element represents a storage location
-    # and contains two keys:
-    #   * :groups  – summary per item (total qty and cost for the storage)
-    #   * :details – list of batches for that storage with their qty and cost
-    # The calculation uses the field names configured via `acts_as_fifo`.
+    # Returns a nested array of hashes with :details and :children keys.
+    # Each element represents a storage location (Level 1), containing items (Level 2),
+    # which in turn contain batches (Level 3) with their qty and cost.
+    #
+    # @param storage_id [Integer, nil] optional storage location filter
+    # @param item_id [Integer, nil] optional item filter
+    # @param to_time [Time, nil] optional upper bound timestamp for transactions
+    # @param fields_info [Hash] association field configuration for :storages and :items
+    # @return [Array<Hash{details: Hash, children: Array>]: nested structure with storage->items->batches
     def stock_balance_by_batches_calculation(storage_id: nil, item_id: nil, to_time: nil, fields_info: {})
       storage_include = fields_info.dig(:storages, :include) || :storage
       item_include = fields_info.dig(:items, :include) || :item
