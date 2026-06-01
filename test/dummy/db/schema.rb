@@ -28,7 +28,6 @@ ActiveRecord::Schema[8.1].define(version: 3) do
     t.integer "storage_id", null: false
     t.datetime "time_at"
     t.decimal "unit_cost", precision: 10, scale: 2
-    t.index ["storage_id", "item_id", "batch_number"], name: "idx_on_storage_id_item_id_batch_number_e7f09aad11"
   end
 
   create_table "storages", force: :cascade do |t|

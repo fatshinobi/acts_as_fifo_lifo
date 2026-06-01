@@ -10,7 +10,5 @@ class CreateStockTransactions < ActiveRecord::Migration[8.1]
       t.integer :operation_id
       t.string :operation_type
     end
-
-    add_index :stock_transactions, [:storage_id, :item_id, :batch_number]
   end
 end

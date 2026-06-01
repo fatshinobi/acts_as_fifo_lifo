@@ -7,7 +7,7 @@ gem "puma"
 gem "sqlite3"
 
 group :development, :test do
-  gem 'factory_bot_rails'
+  gem "factory_bot_rails"
 end
 
 # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]

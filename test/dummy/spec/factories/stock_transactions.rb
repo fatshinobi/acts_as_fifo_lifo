@@ -10,7 +10,7 @@ FactoryBot.define do
     description { "Test item description" }
   end
 
-  factory :stock_transaction, class: 'StockTransaction' do
+  factory :stock_transaction, class: "StockTransaction" do
     batch_number { "BATCH-#{SecureRandom.hex(4)}" }
     association :item
     association :storage
