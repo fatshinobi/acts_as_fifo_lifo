@@ -4,8 +4,11 @@ source "https://rubygems.org"
 gemspec
 
 gem "puma"
-
 gem "sqlite3"
+
+group :development, :test do
+  gem "factory_bot_rails"
+end
 
 # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
 gem "rubocop-rails-omakase", require: false
