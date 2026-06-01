@@ -54,6 +54,37 @@ RSpec.describe StockTransaction, type: :model do
         results = StockTransaction.stock_balance_by_batches_calculation
         expect(results).to be_an(Array)
       end
+
+      it "calculates correct quantities across multiple storages and items" do
+        storage2 = create(:storage)
+        item2 = create(:item)
+
+        create(:stock_transaction, item: item, storage: storage, quantity: 2, batch_number: "OLD", time_at: time_at)
+        create(:stock_transaction, item: item, storage: storage, quantity: 5, batch_number: "NEW", time_at: time_at + 1.hour)
+        create(:stock_transaction, item: item, storage: storage2, quantity: 3, batch_number: "NEW", time_at: time_at)
+        create(:stock_transaction, item: item2, storage: storage, quantity: 7, batch_number: "NEW", time_at: time_at)
+
+        create(:stock_transaction, item: item, storage: storage, quantity: -1, batch_number: "OLD", time_at: time_at + 2.hours)
+        create(:stock_transaction, item: item, storage: storage, quantity: -3, batch_number: "NEW", time_at: time_at + 2.hours)
+        create(:stock_transaction, item: item, storage: storage2, quantity: -1, batch_number: "NEW", time_at: time_at + 2.hours)
+        create(:stock_transaction, item: item2, storage: storage, quantity: -3, batch_number: "NEW", time_at: time_at + 2.hours)
+
+        results = StockTransaction.stock_balance_by_batches_calculation
+
+        storage1_result = results.find { |r| r[:details][:item] == storage.name }
+        expect(storage1_result).not_to be_nil
+
+        item1_batches = storage1_result[:children].find { |c| c[:details][:item] == item.name }[:children]
+        expect(item1_batches.find { |b| b[:details][:item] == "OLD" }[:details][:qty]).to eq(1)
+        expect(item1_batches.find { |b| b[:details][:item] == "NEW" }[:details][:qty]).to eq(2)
+
+        storage2_result = results.find { |r| r[:details][:item] == storage2.name }
+        expect(storage2_result).not_to be_nil
+        expect(storage2_result[:children].first[:children].first[:details][:qty]).to eq(2)
+
+        item2_batch = storage1_result[:children].find { |c| c[:details][:item] == item2.name }[:children].first
+        expect(item2_batch[:details][:qty]).to eq(4)
+      end
     end
 
     describe ".stock_balance_by_items_calculation" do
