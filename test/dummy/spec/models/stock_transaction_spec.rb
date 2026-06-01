@@ -11,6 +11,19 @@ RSpec.describe StockTransaction, type: :model do
           results = StockTransaction.get_batches_for(item.id, storage.id, 10, time_at, method: "fifo")
           expect(results).to be_an(Array)
         end
+
+        it "returns partial quantities from multiple batches in FIFO order" do
+          create(:stock_transaction, item: item, storage: storage, quantity: 2, batch_number: "OLD", time_at: time_at)
+          create(:stock_transaction, item: item, storage: storage, quantity: 5, batch_number: "NEW", time_at: time_at + 1.hour)
+
+          results = StockTransaction.get_batches_for(item.id, storage.id, 5, time_at + 2.hours, method: "fifo")
+
+          expect(results.length).to eq(2)
+          expect(results[0][:batch_number]).to eq("OLD")
+          expect(results[0][:qty]).to eq(2)
+          expect(results[1][:batch_number]).to eq("NEW")
+          expect(results[1][:qty]).to eq(3)
+        end
       end
 
       context "with lifo method" do
