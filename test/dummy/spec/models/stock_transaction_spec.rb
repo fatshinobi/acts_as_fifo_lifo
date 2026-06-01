@@ -144,6 +144,26 @@ RSpec.describe StockTransaction, type: :model do
         results = StockTransaction.stock_balance_for_items_calculation
         expect(results).to be_an(Array)
       end
+
+      it "calculates total item quantities across all storages" do
+        storage2 = create(:storage)
+        item2 = create(:item)
+
+        create(:stock_transaction, item: item, storage: storage, quantity: 2, batch_number: "OLD", time_at: time_at)
+        create(:stock_transaction, item: item, storage: storage, quantity: 5, batch_number: "NEW", time_at: time_at + 1.hour)
+        create(:stock_transaction, item: item, storage: storage2, quantity: 3, batch_number: "NEW", time_at: time_at)
+        create(:stock_transaction, item: item2, storage: storage, quantity: 7, batch_number: "NEW", time_at: time_at)
+
+        create(:stock_transaction, item: item, storage: storage, quantity: -1, batch_number: "OLD", time_at: time_at + 2.hours)
+        create(:stock_transaction, item: item, storage: storage, quantity: -3, batch_number: "NEW", time_at: time_at + 2.hours)
+        create(:stock_transaction, item: item, storage: storage2, quantity: -1, batch_number: "NEW", time_at: time_at + 2.hours)
+        create(:stock_transaction, item: item2, storage: storage, quantity: -3, batch_number: "NEW", time_at: time_at + 2.hours)
+
+        results = StockTransaction.stock_balance_for_items_calculation
+
+        expect(results.find { |r| r[:details][:item] == item.name }[:details][:qty]).to eq(5)
+        expect(results.find { |r| r[:details][:item] == item2.name }[:details][:qty]).to eq(4)
+      end
     end
   end
 end
