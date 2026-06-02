@@ -128,6 +128,78 @@ RSpec.describe StockTransaction, type: :model do
         results = StockTransaction.stock_movement_calculation(start_time: 1.day.ago, end_time: time_at)
         expect(results).to be_an(Array)
       end
+
+      it "calculates correct movement with running balance across multiple storages and items" do
+        storage2 = create(:storage)
+        item2 = create(:item)
+        base_time = Time.current.beginning_of_day
+
+        create(:stock_transaction, item: item, storage: storage, quantity: 2, batch_number: "OLD", time_at: base_time)
+        create(:stock_transaction, item: item, storage: storage, quantity: 5, batch_number: "NEW", time_at: base_time + 1.hour)
+        create(:stock_transaction, item: item, storage: storage, quantity: -1, batch_number: "OLD", time_at: base_time + 2.hours)
+        create(:stock_transaction, item: item, storage: storage, quantity: -3, batch_number: "NEW", time_at: base_time + 3.hours)
+        create(:stock_transaction, item: item, storage: storage2, quantity: 3, batch_number: "NEW", time_at: base_time)
+        create(:stock_transaction, item: item2, storage: storage, quantity: 7, batch_number: "NEW", time_at: base_time)
+        create(:stock_transaction, item: item, storage: storage2, quantity: -1, batch_number: "NEW", time_at: base_time + 1.hour)
+        create(:stock_transaction, item: item2, storage: storage, quantity: -3, batch_number: "NEW", time_at: base_time + 1.hour)
+
+        results = StockTransaction.stock_movement_calculation(start_time: base_time - 1.hour, end_time: base_time + 4.hours)
+
+        storage1_result = results.find { |r| r[:details][:item] == storage.name }
+        expect(storage1_result).not_to be_nil
+        expect(storage1_result[:details][:qty]).to eq(7)
+        expect(storage1_result[:details][:balance]).to eq(0)
+
+        item1_result = storage1_result[:children].find { |c| c[:details][:item] == item.name }
+        expect(item1_result).not_to be_nil
+        expect(item1_result[:details][:qty]).to eq(3)
+        expect(item1_result[:details][:balance]).to eq(0)
+
+        batch_transactions = item1_result[:children].map { |t| t[:details] }
+        expect(batch_transactions[0][:qty]).to eq(2)
+        expect(batch_transactions[0][:balance]).to eq(2)
+        expect(batch_transactions[0][:item]).to eq("OLD")
+        expect(batch_transactions[1][:qty]).to eq(5)
+        expect(batch_transactions[1][:balance]).to eq(7)
+        expect(batch_transactions[1][:item]).to eq("NEW")
+        expect(batch_transactions[2][:qty]).to eq(-1)
+        expect(batch_transactions[2][:balance]).to eq(6)
+        expect(batch_transactions[2][:item]).to eq("OLD")
+        expect(batch_transactions[3][:qty]).to eq(-3)
+        expect(batch_transactions[3][:balance]).to eq(3)
+        expect(batch_transactions[3][:item]).to eq("NEW")
+
+        item2_result = storage1_result[:children].find { |c| c[:details][:item] == item2.name }
+        expect(item2_result).not_to be_nil
+        expect(item2_result[:details][:qty]).to eq(4)
+        expect(item2_result[:details][:balance]).to eq(0)
+
+        item2_transactions = item2_result[:children].map { |t| t[:details] }
+        expect(item2_transactions[0][:qty]).to eq(7)
+        expect(item2_transactions[0][:balance]).to eq(7)
+        expect(item2_transactions[0][:item]).to eq("NEW")
+        expect(item2_transactions[1][:qty]).to eq(-3)
+        expect(item2_transactions[1][:balance]).to eq(4)
+        expect(item2_transactions[1][:item]).to eq("NEW")
+
+        storage2_result = results.find { |r| r[:details][:item] == storage2.name }
+        expect(storage2_result).not_to be_nil
+        expect(storage2_result[:details][:qty]).to eq(2)
+        expect(storage2_result[:details][:balance]).to eq(0)
+
+        storage2_item_result = storage2_result[:children].first
+        expect(storage2_item_result[:details][:item]).to eq(item.name)
+        expect(storage2_item_result[:details][:qty]).to eq(2)
+        expect(storage2_item_result[:details][:balance]).to eq(0)
+
+        storage2_transactions = storage2_item_result[:children].map { |t| t[:details] }
+        expect(storage2_transactions[0][:qty]).to eq(3)
+        expect(storage2_transactions[0][:balance]).to eq(3)
+        expect(storage2_transactions[0][:item]).to eq("NEW")
+        expect(storage2_transactions[1][:qty]).to eq(-1)
+        expect(storage2_transactions[1][:balance]).to eq(2)
+        expect(storage2_transactions[1][:item]).to eq("NEW")
+      end
     end
 
     describe ".balance_for" do
